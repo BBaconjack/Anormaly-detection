@@ -217,3 +217,85 @@ class MVTecDataset(Dataset):
         assert len(x) == len(y), 'number of x and y should be same'
 
         return list(x), list(y), list(mask)
+
+class traindataset(Dataset):
+    def __init__(self, root, transform, gt_transform):
+        self.label_path = os.path.join(root, 'ok_list.txt')
+        self.transform = transform
+        self.gt_transform = gt_transform
+        self.img_paths, self.labels = self.load_dataset() # self.labels => good : 0, anomaly : 1
+
+
+    def load_dataset(self):
+        img_tot_paths = []
+        tot_labels = []
+        #tot_types = []
+        with open(self.label_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                temp_path = line
+                img_tot_paths.append(temp_path)
+                temp_label = 0
+                tot_labels.append(int(temp_label))
+                #tot_types.append('good' if temp_label=='0' else 'defect')
+                del temp_path
+        return img_tot_paths, tot_labels
+
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, idx):
+        img_path, label = self.img_paths[idx], self.labels[idx]
+        img = Image.open(img_path).convert('RGB')
+        img = self.transform(img)
+
+        return img, label
+
+class MyDataset(Dataset):
+    def __init__(self, root, transform, gt_transform):
+
+        self.img_path = root
+        self.transform = transform
+        self.gt_transform = gt_transform
+        # load dataset
+        self.img_paths, self.labels= self.load_dataset() # self.labels => good : 0, anomaly : 1
+
+    def load_dataset(self):
+
+        img_tot_paths = []
+        #gt_tot_paths = []
+        tot_labels = []
+        #tot_types = []
+
+        defect_types = os.listdir(self.img_path)
+
+        for defect_type in defect_types:
+            if defect_type == 'imgs_folder':
+                img_paths = glob.glob(os.path.join(self.img_path, defect_type) + "/*.jpg")
+                img_tot_paths.extend(img_paths)
+                #gt_tot_paths.extend([0]*len(img_paths))
+                tot_labels.extend([0]*len(img_paths))
+                #tot_types.extend(['good']*len(img_paths))
+            else:
+                img_paths = glob.glob(os.path.join(self.img_path, defect_type) + "/*.jpg")
+                #gt_paths = glob.glob(os.path.join(self.gt_path, defect_type) + "/*.png")
+                img_paths.sort()
+                img_tot_paths.extend(img_paths)
+                #gt_tot_paths.extend(gt_paths)
+                tot_labels.extend([1]*len(img_paths))
+                #tot_types.extend([defect_type]*len(img_paths))
+
+        #assert len(img_tot_paths) == len(gt_tot_paths), "Something wrong with test and ground truth pair!"
+
+        return img_tot_paths, tot_labels
+
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, idx):
+        img_path, label = self.img_paths[idx], self.labels[idx]
+        img = Image.open(img_path).convert('RGB')
+        #img = Image.open(img_path)
+        img = self.transform(img)
+
+        return img, label
