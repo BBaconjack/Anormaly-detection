@@ -100,7 +100,7 @@ def export_scores(c, test_img, scores, threshold):
             plt.close()
 
 
-def export_test_images(c, test_img, gts, scores, threshold):
+def export_test_images(c, test_img, scores, threshold):
     image_dirs = os.path.join(OUT_DIR, c.model, 'images_' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S"))
     cm = 1/2.54
     # images
@@ -115,11 +115,11 @@ def export_test_images(c, test_img, gts, scores, threshold):
             img = test_img[i]
             img = denormalization(img, c.norm_mean, c.norm_std)
             # gts
-            gt_mask = gts[i].astype(np.float64)
-            print('GT:', i, gt_mask.sum())
-            gt_mask = morphology.opening(gt_mask, kernel)
-            gt_mask = (255.0*gt_mask).astype(np.uint8)
-            gt_img = mark_boundaries(img, gt_mask, color=(1, 0, 0), mode='thick')
+            # gt_mask = gts[i].astype(np.float64)
+            # print('GT:', i, gt_mask.sum())
+            # gt_mask = morphology.opening(gt_mask, kernel)
+            # gt_mask = (255.0*gt_mask).astype(np.uint8)
+            # gt_img = mark_boundaries(img, gt_mask, color=(1, 0, 0), mode='thick')
             # scores
             score_mask = np.zeros_like(scores[i])
             score_mask[scores[i] >  threshold] = 1.0
@@ -129,7 +129,7 @@ def export_test_images(c, test_img, gts, scores, threshold):
             score_img = mark_boundaries(img, score_mask, color=(1, 0, 0), mode='thick')
             score_map = (255.0*scores[i]*scores_norm).astype(np.uint8)
             #
-            fig_img, ax_img = plt.subplots(3, 1, figsize=(2*cm, 6*cm))
+            fig_img, ax_img = plt.subplots(2, 1, figsize=(2*cm, 6*cm))
             for ax_i in ax_img:
                 ax_i.axes.xaxis.set_visible(False)
                 ax_i.axes.yaxis.set_visible(False)
@@ -139,9 +139,9 @@ def export_test_images(c, test_img, gts, scores, threshold):
                 ax_i.spines['left'].set_visible(False)
             #
             plt.subplots_adjust(hspace = 0.1, wspace = 0.1)
-            ax_img[0].imshow(gt_img)
-            ax_img[1].imshow(score_map, cmap='jet', norm=norm)
-            ax_img[2].imshow(score_img)
+            #ax_img[0].imshow(gt_img)
+            ax_img[0].imshow(score_map, cmap='jet', norm=norm)
+            ax_img[1].imshow(score_img)
             image_file = os.path.join(image_dirs, '{:08d}'.format(i))
             fig_img.savefig(image_file, dpi=dpi, format='svg', bbox_inches = 'tight', pad_inches = 0.0)
             plt.close()

@@ -99,18 +99,18 @@ def test_meta_epoch(c, epoch, loader, encoder, decoders, pool_layers, N):
     width = list()
     image_list = list()
     gt_label_list = list()
-    gt_mask_list = list()
+    #gt_mask_list = list()
     test_dist = [list() for layer in pool_layers]
     test_loss = 0.0
     test_count = 0
     start = time.time()
     with torch.no_grad():
-        for i, (image, label, mask) in enumerate(tqdm(loader, disable=c.hide_tqdm_bar)):
+        for i, (image, label) in enumerate(tqdm(loader, disable=c.hide_tqdm_bar)):
             # save
             if c.viz:
                 image_list.extend(t2np(image))
             gt_label_list.extend(t2np(label))
-            gt_mask_list.extend(t2np(mask))
+            #gt_mask_list.extend(t2np(mask))
             # data
             image = image.to(c.device) # single scale
             _ = encoder(image)  # BxCxHxW
@@ -136,8 +136,8 @@ def test_meta_epoch(c, epoch, loader, encoder, decoders, pool_layers, N):
                 c_r = p.reshape(B, P, S).transpose(1, 2).reshape(E, P)  # BHWxP
                 e_r = e.reshape(B, C, S).transpose(1, 2).reshape(E, C)  # BHWxC
                 #
-                m = F.interpolate(mask, size=(H, W), mode='nearest')
-                m_r = m.reshape(B, 1, S).transpose(1, 2).reshape(E, 1)  # BHWx1
+                #m = F.interpolate(mask, size=(H, W), mode='nearest')
+                #m_r = m.reshape(B, 1, S).transpose(1, 2).reshape(E, 1)  # BHWx1
                 #
                 decoder = decoders[l]
                 FIB = E//N + int(E%N > 0)  # number of fiber batches
@@ -149,7 +149,7 @@ def test_meta_epoch(c, epoch, loader, encoder, decoders, pool_layers, N):
                     #
                     c_p = c_r[idx]  # NxP
                     e_p = e_r[idx]  # NxC
-                    m_p = m_r[idx] > 0.5  # Nx1
+                    #m_p = m_r[idx] > 0.5  # Nx1
                     #
                     if 'cflow' in c.dec_arch:
                         z, log_jac_det = decoder(e_p, [c_p,])
@@ -168,7 +168,7 @@ def test_meta_epoch(c, epoch, loader, encoder, decoders, pool_layers, N):
     if c.verbose:
         print('Epoch: {:d} \t test_loss: {:.4f} and {:.2f} fps'.format(epoch, mean_test_loss, fps))
     #
-    return height, width, image_list, test_dist, gt_label_list, gt_mask_list
+    return height, width, image_list, test_dist, gt_label_list
 
 
 def test_meta_fps(c, epoch, loader, encoder, decoders, pool_layers, N):
@@ -182,7 +182,7 @@ def test_meta_fps(c, epoch, loader, encoder, decoders, pool_layers, N):
     width = list()
     image_list = list()
     gt_label_list = list()
-    gt_mask_list = list()
+    #gt_mask_list = list()
     test_dist = [list() for layer in pool_layers]
     test_loss = 0.0
     test_count = 0
@@ -252,7 +252,7 @@ def test_meta_fps(c, epoch, loader, encoder, decoders, pool_layers, N):
     fps_all = A / time_all
     print('Encoder/All {:.2f}/{:.2f} fps'.format(fps_enc, fps_all))
     #
-    return height, width, image_list, test_dist, gt_label_list, gt_mask_list
+    return height, width, image_list, test_dist, gt_label_list
 
 
 def train(c):
@@ -305,7 +305,7 @@ def train(c):
         #height, width, test_image_list, test_dist, gt_label_list, gt_mask_list = test_meta_fps(
         #    c, epoch, test_loader, encoder, decoders, pool_layers, N)
 
-        height, width, test_image_list, test_dist, gt_label_list, gt_mask_list = test_meta_epoch(
+        height, width, test_image_list, test_dist, gt_label_list = test_meta_epoch(
             c, epoch, test_loader, encoder, decoders, pool_layers, N)
 
         # PxEHW
@@ -331,13 +331,15 @@ def train(c):
         score_label = np.max(super_mask, axis=(1, 2))
         gt_label = np.asarray(gt_label_list, dtype=np.bool)
         det_roc_auc = roc_auc_score(gt_label, score_label)
-        _ = det_roc_obs.update(100.0*det_roc_auc, epoch)
+        save_best_det_weights = det_roc_obs.update(100.0*det_roc_auc, epoch)
+        if save_best_det_weights and c.action_type != 'norm-test':
+            save_weights(encoder, decoders, c.model, run_date)  # avoid unnecessary saves        
         # calculate segmentation AUROC
-        gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=np.bool), axis=1)
-        seg_roc_auc = roc_auc_score(gt_mask.flatten(), super_mask.flatten())
-        save_best_seg_weights = seg_roc_obs.update(100.0*seg_roc_auc, epoch)
-        if save_best_seg_weights and c.action_type != 'norm-test':
-            save_weights(encoder, decoders, c.model, run_date)  # avoid unnecessary saves
+        # gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=np.bool), axis=1)
+        # seg_roc_auc = roc_auc_score(gt_mask.flatten(), super_mask.flatten())
+        # save_best_seg_weights = seg_roc_obs.update(100.0*seg_roc_auc, epoch)
+        # if save_best_seg_weights and c.action_type != 'norm-test':
+        #     save_weights(encoder, decoders, c.model, run_date)  # avoid unnecessary saves
         # calculate segmentation AUPRO
         # from https://github.com/YoungGod/DFR:
         if c.pro:  # and (epoch % 4 == 0):  # AUPRO is expensive to compute
@@ -416,13 +418,13 @@ def train(c):
         f1 = np.divide(a, b, out=np.zeros_like(a), where=b != 0)
         det_threshold = thresholds[np.argmax(f1)]
         print('Optimal DET Threshold: {:.2f}'.format(det_threshold))
-        precision, recall, thresholds = precision_recall_curve(gt_mask.flatten(), super_mask.flatten())
-        a = 2 * precision * recall
-        b = precision + recall
-        f1 = np.divide(a, b, out=np.zeros_like(a), where=b != 0)
+        # precision, recall, thresholds = precision_recall_curve(gt_mask.flatten(), super_mask.flatten())
+        # a = 2 * precision * recall
+        # b = precision + recall
+        # f1 = np.divide(a, b, out=np.zeros_like(a), where=b != 0)
         seg_threshold = thresholds[np.argmax(f1)]
-        print('Optimal SEG Threshold: {:.2f}'.format(seg_threshold))
-        export_groundtruth(c, test_image_list, gt_mask)
-        export_scores(c, test_image_list, super_mask, seg_threshold)
-        export_test_images(c, test_image_list, gt_mask, super_mask, seg_threshold)
-        export_hist(c, gt_mask, super_mask, seg_threshold)
+        # print('Optimal SEG Threshold: {:.2f}'.format(seg_threshold))
+        #export_groundtruth(c, test_image_list, gt_mask)
+        #export_scores(c, test_image_list, super_mask, seg_threshold)
+        export_test_images(c, test_image_list,super_mask, seg_threshold)
+        #export_hist(c, gt_mask, super_mask)
